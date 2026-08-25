@@ -1,40 +1,95 @@
 package com.remotes.rclone
 
 import android.content.Context
+import android.content.SharedPreferences
+import android.os.Environment
 import com.remotes.rclone.model.FileItem
 import com.remotes.rclone.model.QuotaInfo
 import java.io.File
 
 object RcloneConfig {
 
+    private const val PREFS_NAME = "rclone_prefs"
+    private const val KEY_RCLONE_BIN = "rclone_bin_path"
+    private const val KEY_RCLONE_CONF = "rclone_conf_path"
+
     data class Result(val stdout: String, val stderr: String, val exitCode: Int)
 
+    private fun prefs(context: Context): SharedPreferences =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    fun setRcloneBinaryPath(context: Context, path: String) {
+        prefs(context).edit().putString(KEY_RCLONE_BIN, path).apply()
+    }
+
+    fun setRcloneConfPath(context: Context, path: String) {
+        prefs(context).edit().putString(KEY_RCLONE_CONF, path).apply()
+    }
+
+    fun getRcloneBinaryPath(context: Context): String = prefs(context).getString(KEY_RCLONE_BIN, "") ?: ""
+    fun getRcloneConfPath(context: Context): String = prefs(context).getString(KEY_RCLONE_CONF, "") ?: ""
+
     fun findRcloneBinary(context: Context): String {
+        val custom = prefs(context).getString(KEY_RCLONE_BIN, "") ?: ""
+        if (custom.isNotEmpty() && File(custom).canExecute()) return custom
+
+        val extDir = context.getExternalFilesDir(null)
         val candidates = listOf(
-            "/data/data/com.termux/files/usr/bin/rclone",
-            "/system/bin/rclone",
-            "/system/xbin/rclone",
-            "${context.filesDir.parentFile?.parentFile}/usr/bin/rclone",
-            "/data/data/com.termux/files/home/.local/bin/rclone"
-        )
+            File(context.filesDir, "rclone"),
+            extDir?.let { File(it, "rclone") },
+            File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "rclone"),
+            File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), "rclone"),
+            File("/sdcard/Download/rclone"),
+            File("/sdcard/Documents/rclone"),
+            File(context.filesDir.parentFile, "usr/bin/rclone"),
+            File("/data/local/tmp/rclone")
+        ).filterNotNull()
+
         for (c in candidates) {
-            if (File(c).exists()) return c
+            if (c.exists() && c.canExecute()) return c.absolutePath
+            if (c.exists() && !c.canExecute()) {
+                c.setExecutable(true, false)
+                if (c.canExecute()) return c.absolutePath
+            }
         }
-        val localBin = File(context.filesDir, "rclone")
-        if (localBin.exists()) return localBin.absolutePath
+
         return "rclone"
     }
 
     fun findRcloneConf(context: Context): String {
+        val custom = prefs(context).getString(KEY_RCLONE_CONF, "") ?: ""
+        if (custom.isNotEmpty() && File(custom).exists()) return custom
+
+        val extDir = context.getExternalFilesDir(null)
         val candidates = listOf(
-            File("/data/data/com.termux/files/home/storage/downloads/rclone.conf"),
-            File(System.getProperty("user.home") ?: "", ".config/rclone/rclone.conf"),
-            File(context.filesDir, "rclone.conf")
-        )
+            File(context.filesDir, "rclone.conf"),
+            extDir?.let { File(it, "rclone.conf") },
+            File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "rclone.conf"),
+            File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), "rclone.conf"),
+            File("/sdcard/Download/rclone.conf"),
+            File("/sdcard/Documents/rclone.conf")
+        ).filterNotNull()
+
         for (c in candidates) {
             if (c.exists()) return c.absolutePath
         }
+
         return ""
+    }
+
+    fun copyFileToInternal(context: Context, sourceUri: android.net.Uri, targetName: String): String? {
+        return try {
+            val target = File(context.filesDir, targetName)
+            context.contentResolver.openInputStream(sourceUri)?.use { input ->
+                target.outputStream().use { output -> input.copyTo(output) }
+            }
+            if (targetName == "rclone") {
+                target.setExecutable(true, false)
+            }
+            target.absolutePath
+        } catch (e: Exception) {
+            null
+        }
     }
 
     fun runCommand(

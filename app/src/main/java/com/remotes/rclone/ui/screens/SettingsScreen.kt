@@ -1,7 +1,6 @@
 package com.remotes.rclone.ui.screens
 
 import android.content.Context
-import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -10,7 +9,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,37 +31,45 @@ fun SettingsScreen(
     val context = LocalContext.current
     val rcloneBin = remember { RcloneConfig.findRcloneBinary(context) }
     val rcloneConf = remember { RcloneConfig.findRcloneConf(context) }
-    val confExists = remember { File(rcloneConf).exists() }
-    val binExists = remember { File(rcloneBin).exists() }
+    val customBin = remember { RcloneConfig.getRcloneBinaryPath(context) }
+    val customConf = remember { RcloneConfig.getRcloneConfPath(context) }
+    val binFound = remember { File(rcloneBin).exists() }
+    val confFound = remember { File(rcloneConf).exists() }
 
-    var confText by remember {
-        mutableStateOf(
-            if (confExists) try {
-                File(rcloneConf).readText()
-            } catch (e: Exception) {
-                "Error reading config"
-            } else ""
-        )
+    var statusMsg by remember { mutableStateOf("") }
+
+    val binPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let {
+            val path = RcloneConfig.copyFileToInternal(context, it, "rclone")
+            if (path != null) {
+                RcloneConfig.setRcloneBinaryPath(context, path)
+                statusMsg = "rclone binary imported successfully"
+            } else {
+                statusMsg = "Failed to import rclone binary"
+            }
+        }
     }
 
     val confPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
         uri?.let {
-            try {
-                context.contentResolver.openInputStream(it)?.use { input ->
-                    val target = File(context.filesDir, "rclone.conf")
-                    target.outputStream().use { output -> input.copyTo(output) }
-                    confText = target.readText()
-                }
-            } catch (_: Exception) {}
+            val path = RcloneConfig.copyFileToInternal(context, it, "rclone.conf")
+            if (path != null) {
+                RcloneConfig.setRcloneConfPath(context, path)
+                statusMsg = "rclone.conf imported successfully"
+            } else {
+                statusMsg = "Failed to import rclone.conf"
+            }
         }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Settings") },
+                title = { Text("Setup") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
@@ -76,64 +86,148 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Rclone Binary", fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = rcloneBin,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (binExists) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-                    )
-                    Text(
-                        text = if (binExists) "Found" else "Not found",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (binExists) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-                    )
-                }
-            }
+            Text(
+                text = "Setup rclone",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
 
+            Text(
+                text = "This app needs the rclone binary and a rclone.conf config file. " +
+                        "Copy both files to your device, then import them below.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            HorizontalDivider()
+
+            // RCLONE BINARY SECTION
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text("Rclone Config", fontWeight = FontWeight.Bold)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = if (confExists) rcloneConf else "Not found",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (confExists) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (binFound) {
+                            Icon(
+                                Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        } else {
+                            Icon(
+                                Icons.Default.Error,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error
                             )
                         }
-                        IconButton(onClick = {
-                            confPicker.launch(arrayOf("*/*"))
-                        }) {
-                            Icon(Icons.Default.FolderOpen, "Import config")
-                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("rclone binary", fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    if (customBin.isNotEmpty()) {
+                        Text(
+                            text = "Custom: $customBin",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    Text(
+                        text = "Active: $rcloneBin",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (binFound) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "To get the rclone binary, run in Termux:\n" +
+                                "cp /data/data/com.termux/files/usr/bin/rclone \\\n" +
+                                "  /sdcard/Download/rclone",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Button(
+                        onClick = { binPicker.launch(arrayOf("*/*")) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.FolderOpen, null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Import rclone binary")
                     }
                 }
             }
 
+            // RCLONE CONF SECTION
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Config Contents", fontWeight = FontWeight.Bold)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (confFound) {
+                            Icon(
+                                Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        } else {
+                            Icon(
+                                Icons.Default.Error,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("rclone.conf", fontWeight = FontWeight.Bold)
+                    }
                     Spacer(modifier = Modifier.height(8.dp))
-                    if (confText.isNotEmpty()) {
+
+                    if (customConf.isNotEmpty()) {
                         Text(
-                            text = confText,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    } else {
-                        Text(
-                            text = "No configuration loaded",
+                            text = "Custom: $customConf",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
+
+                    Text(
+                        text = "Active: $rcloneConf",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (confFound) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "To get rclone.conf, run in Termux:\n" +
+                                "cp ~/.config/rclone/rclone.conf \\\n" +
+                                "  /sdcard/Download/rclone.conf",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedButton(
+                        onClick = { confPicker.launch(arrayOf("*/*")) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.FolderOpen, null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Import rclone.conf")
+                    }
+                }
+            }
+
+            if (statusMsg.isNotEmpty()) {
+                Snackbar(
+                    action = {
+                        TextButton(onClick = { statusMsg = "" }) {
+                            Text("OK")
+                        }
+                    }
+                ) {
+                    Text(statusMsg)
                 }
             }
         }
