@@ -49,6 +49,12 @@ object RcloneConfig {
             }
         }
 
+        val tmpRclone = File("/data/local/tmp/rclone")
+        if (tmpRclone.exists()) {
+            try { Runtime.getRuntime().exec(arrayOf("chmod", "777", tmpRclone.absolutePath)).waitFor() } catch (_: Exception) {}
+            return tmpRclone.absolutePath
+        }
+
         val extDir = context.getExternalFilesDir(null)
         val candidates = listOf(
             File(context.filesDir, "rclone"),
@@ -96,16 +102,22 @@ object RcloneConfig {
 
     fun copyFileToInternal(context: Context, sourceUri: android.net.Uri, targetName: String): String? {
         return try {
+            if (targetName == "rclone") {
+                val target = File("/data/local/tmp/rclone")
+                context.contentResolver.openInputStream(sourceUri)?.use { input ->
+                    target.outputStream().use { output -> input.copyTo(output) }
+                }
+                try {
+                    val p = Runtime.getRuntime().exec(arrayOf("chmod", "777", target.absolutePath))
+                    p.waitFor()
+                } catch (_: Exception) {}
+                Log.d(TAG, "Copied rclone to ${target.absolutePath} (size=${target.length()}, exec=${target.canExecute()})")
+                return target.absolutePath
+            }
+
             val target = File(context.filesDir, targetName)
             context.contentResolver.openInputStream(sourceUri)?.use { input ->
                 target.outputStream().use { output -> input.copyTo(output) }
-            }
-            if (targetName == "rclone") {
-                target.setExecutable(true, false)
-                // Force chmod via Runtime to ensure it's executable
-                try {
-                    Runtime.getRuntime().exec(arrayOf("chmod", "755", target.absolutePath)).waitFor()
-                } catch (_: Exception) {}
             }
             Log.d(TAG, "Copied $targetName to ${target.absolutePath} (size=${target.length()})")
             target.absolutePath
