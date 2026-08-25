@@ -49,10 +49,11 @@ object RcloneConfig {
             }
         }
 
-        val tmpRclone = File("/data/local/tmp/rclone")
-        if (tmpRclone.exists()) {
-            try { Runtime.getRuntime().exec(arrayOf("chmod", "777", tmpRclone.absolutePath)).waitFor() } catch (_: Exception) {}
-            return tmpRclone.absolutePath
+        // Bundled as native lib (librclone.so) - Android extracts to executable path
+        val nativeDir = File(context.applicationInfo.nativeLibraryDir, "librclone.so")
+        if (nativeDir.exists()) {
+            nativeDir.setExecutable(true, false)
+            return nativeDir.absolutePath
         }
 
         val extDir = context.getExternalFilesDir(null)
