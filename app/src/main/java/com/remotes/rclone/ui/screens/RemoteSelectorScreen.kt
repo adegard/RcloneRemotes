@@ -20,6 +20,7 @@ import com.remotes.rclone.model.RemoteInfo
 @Composable
 fun RemoteSelectorScreen(
     remotes: List<RemoteInfo>,
+    errorMsg: String,
     onSelect: (String) -> Unit,
     onSettings: () -> Unit,
     onRefresh: () -> Unit,
@@ -52,19 +53,47 @@ fun RemoteSelectorScreen(
                 modifier = Modifier.fillMaxSize().padding(padding),
                 contentAlignment = Alignment.Center
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(32.dp)
+                ) {
                     Text(
                         "No remotes found",
                         style = MaterialTheme.typography.headlineSmall
                     )
                     Spacer(modifier = Modifier.height(8.dp))
+
+                    if (errorMsg.isNotEmpty()) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer
+                            )
+                        ) {
+                            Text(
+                                text = errorMsg,
+                                modifier = Modifier.padding(12.dp),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+
                     Text(
-                        "Make sure rclone is installed and configured",
+                        "Tap Settings to import rclone binary and config",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(16.dp))
-                    Button(onClick = onRefresh) {
+
+                    Button(onClick = onSettings) {
+                        Icon(Icons.Default.Settings, null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Setup")
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(onClick = onRefresh) {
                         Icon(Icons.Default.Refresh, null)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Retry")

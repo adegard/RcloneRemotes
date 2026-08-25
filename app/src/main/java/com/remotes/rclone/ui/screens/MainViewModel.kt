@@ -84,7 +84,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun loadRemotes() {
         viewModelScope.launch(Dispatchers.IO) {
             _isLoading.value = true
-            val raw = RcloneConfig.listRemotes(ctx)
+            _errorMsg.value = ""
+            val r = RcloneConfig.runCommand(ctx, listOf("listremotes"))
+            if (r.exitCode != 0 && r.stdout.isBlank()) {
+                _errorMsg.value = "rclone error: ${r.stderr.ifBlank { r.stdout }.ifBlank { "binary not working" }}"
+            }
+            val raw = r.stdout.lines().filter { it.isNotBlank() }.map { it.trimEnd(':') }
             val builtIn = listOf(
                 RemoteInfo("Box", "box"),
                 RemoteInfo("Dropbox", "dropbox"),
@@ -96,8 +101,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val available = builtIn.filter { b ->
                 raw.any { it.lowercase() == b.name.lowercase() }
             }
-            val extra = raw.filter { r ->
-                builtIn.none { it.name.lowercase() == r.lowercase() }
+            val extra = raw.filter { r2 ->
+                builtIn.none { it.name.lowercase() == r2.lowercase() }
             }.map { RemoteInfo(it.replaceFirstChar { c -> c.uppercase() }, it) }
 
             _remotes.value = available + extra

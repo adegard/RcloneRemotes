@@ -3,17 +3,27 @@ package com.remotes.rclone
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Environment
+import android.util.Log
 import com.remotes.rclone.model.FileItem
 import com.remotes.rclone.model.QuotaInfo
 import java.io.File
 
 object RcloneConfig {
 
+    private const val TAG = "RcloneConfig"
     private const val PREFS_NAME = "rclone_prefs"
     private const val KEY_RCLONE_BIN = "rclone_bin_path"
     private const val KEY_RCLONE_CONF = "rclone_conf_path"
 
     data class Result(val stdout: String, val stderr: String, val exitCode: Int)
+    data class Diagnostic(
+        val binPath: String,
+        val binExists: Boolean,
+        val binExecutable: Boolean,
+        val confPath: String,
+        val confExists: Boolean,
+        val testResult: String
+    )
 
     private fun prefs(context: Context): SharedPreferences =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -31,7 +41,13 @@ object RcloneConfig {
 
     fun findRcloneBinary(context: Context): String {
         val custom = prefs(context).getString(KEY_RCLONE_BIN, "") ?: ""
-        if (custom.isNotEmpty() && File(custom).canExecute()) return custom
+        if (custom.isNotEmpty()) {
+            val f = File(custom)
+            if (f.exists()) {
+                f.setExecutable(true, false)
+                return custom
+            }
+        }
 
         val extDir = context.getExternalFilesDir(null)
         val candidates = listOf(
@@ -41,15 +57,13 @@ object RcloneConfig {
             File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), "rclone"),
             File("/sdcard/Download/rclone"),
             File("/sdcard/Documents/rclone"),
-            File(context.filesDir.parentFile, "usr/bin/rclone"),
             File("/data/local/tmp/rclone")
         ).filterNotNull()
 
         for (c in candidates) {
-            if (c.exists() && c.canExecute()) return c.absolutePath
-            if (c.exists() && !c.canExecute()) {
+            if (c.exists()) {
                 c.setExecutable(true, false)
-                if (c.canExecute()) return c.absolutePath
+                return c.absolutePath
             }
         }
 
@@ -58,7 +72,10 @@ object RcloneConfig {
 
     fun findRcloneConf(context: Context): String {
         val custom = prefs(context).getString(KEY_RCLONE_CONF, "") ?: ""
-        if (custom.isNotEmpty() && File(custom).exists()) return custom
+        if (custom.isNotEmpty()) {
+            val f = File(custom)
+            if (f.exists()) return custom
+        }
 
         val extDir = context.getExternalFilesDir(null)
         val candidates = listOf(
@@ -85,11 +102,65 @@ object RcloneConfig {
             }
             if (targetName == "rclone") {
                 target.setExecutable(true, false)
+                // Force chmod via Runtime to ensure it's executable
+                try {
+                    Runtime.getRuntime().exec(arrayOf("chmod", "755", target.absolutePath)).waitFor()
+                } catch (_: Exception) {}
             }
+            Log.d(TAG, "Copied $targetName to ${target.absolutePath} (size=${target.length()})")
             target.absolutePath
         } catch (e: Exception) {
+            Log.e(TAG, "Failed to copy $targetName: ${e.message}")
             null
         }
+    }
+
+    fun runDiagnostic(context: Context): Diagnostic {
+        val binPath = findRcloneBinary(context)
+        val confPath = findRcloneConf(context)
+        val binFile = File(binPath)
+        val confFile = File(confPath)
+
+        val binExists = binFile.exists()
+        var binExecutable = false
+        if (binExists) {
+            binFile.setExecutable(true, false)
+            binExecutable = binFile.canExecute()
+        }
+
+        val confExists = confFile.exists()
+
+        var testResult = ""
+        if (binExists) {
+            val args = mutableListOf(binPath)
+            if (confExists) {
+                args.addAll(listOf("--config", confPath))
+            }
+            args.addAll(listOf("listremotes"))
+            try {
+                val pb = ProcessBuilder(args)
+                pb.redirectErrorStream(true)
+                pb.environment()["HOME"] = context.filesDir.absolutePath
+                val proc = pb.start()
+                val output = proc.inputStream.bufferedReader().readText()
+                val exited = proc.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)
+                val code = if (exited) proc.exitValue() else -1
+                testResult = "exit=$code output=[${output.trim()}]"
+            } catch (e: Exception) {
+                testResult = "error=${e.message}"
+            }
+        } else {
+            testResult = "binary not found at: $binPath"
+        }
+
+        return Diagnostic(
+            binPath = binPath,
+            binExists = binExists,
+            binExecutable = binExecutable,
+            confPath = confPath,
+            confExists = confExists,
+            testResult = testResult
+        )
     }
 
     fun runCommand(
@@ -106,6 +177,8 @@ object RcloneConfig {
             cmd.addAll(listOf("--config", confPath))
         }
         cmd.addAll(args)
+
+        Log.d(TAG, "Running: ${cmd.joinToString(" ")}")
 
         return try {
             val pb = ProcessBuilder(cmd)
@@ -124,10 +197,13 @@ object RcloneConfig {
             val finished = proc.waitFor(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
             val exitCode = if (finished) proc.exitValue() else -1
 
+            Log.d(TAG, "exit=$exitCode stdout=[${stdout.take(200)}] stderr=[${stderr.take(200)}]")
             Result(stdout, stderr, exitCode)
         } catch (e: java.io.IOException) {
-            Result("", "rclone not found at: $rclone", -1)
+            Log.e(TAG, "IOException: ${e.message}")
+            Result("", "rclone not found at: $rclone - ${e.message}", -1)
         } catch (e: Exception) {
+            Log.e(TAG, "Exception: ${e.message}")
             Result("", e.message ?: "Unknown error", -1)
         }
     }

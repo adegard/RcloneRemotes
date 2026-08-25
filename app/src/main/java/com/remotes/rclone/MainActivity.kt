@@ -97,6 +97,7 @@ fun RcloneApp(vm: MainViewModel = viewModel()) {
         is MainViewModel.Screen.RemoteSelector -> {
             RemoteSelectorScreen(
                 remotes = remotes,
+                errorMsg = errorMsg,
                 onSelect = { vm.selectRemote(it) },
                 onSettings = { vm.goToSettings() },
                 onRefresh = { vm.loadRemotes() },
