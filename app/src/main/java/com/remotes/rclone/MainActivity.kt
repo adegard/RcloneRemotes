@@ -162,6 +162,7 @@ fun RcloneApp(vm: MainViewModel = viewModel()) {
         }
         is MainViewModel.Screen.SyncRemoteRemote -> {
             SyncRemoteRemoteScreen(
+                availableRemotes = remotes.map { it.name },
                 isLoading = isLoading,
                 statusMsg = statusMsg,
                 errorMsg = errorMsg,

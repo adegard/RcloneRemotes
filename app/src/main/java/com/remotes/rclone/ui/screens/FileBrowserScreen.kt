@@ -53,7 +53,19 @@ fun FileBrowserScreen(
     var showDeleteDialog by remember { mutableStateOf<FileItem?>(null) }
     var showRenameDialog by remember { mutableStateOf<FileItem?>(null) }
     var showMoveDialog by remember { mutableStateOf<FileItem?>(null) }
+    var showMovePicker by remember { mutableStateOf(false) }
+    var moveDestPath by remember { mutableStateOf("") }
     var contextMenu by remember { mutableStateOf<FileItem?>(null) }
+
+    if (showMovePicker) {
+        RemoteFolderPicker(
+            remote = remote,
+            initialPath = path,
+            onPick = { moveDestPath = it; showMovePicker = false },
+            onDismiss = { showMovePicker = false }
+        )
+        return
+    }
 
     val filePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -332,22 +344,26 @@ fun FileBrowserScreen(
         }
 
         showMoveDialog?.let { item ->
-            var destPath by remember { mutableStateOf("") }
             AlertDialog(
                 onDismissRequest = { showMoveDialog = null },
                 title = { Text("Move '${item.name}'") },
                 text = {
                     OutlinedTextField(
-                        value = destPath,
-                        onValueChange = { destPath = it },
+                        value = moveDestPath,
+                        onValueChange = { moveDestPath = it },
                         label = { Text("Destination folder path") },
-                        singleLine = true
+                        singleLine = true,
+                        trailingIcon = {
+                            IconButton(onClick = { showMovePicker = true }) {
+                                Icon(Icons.Default.Folder, "Browse folders")
+                            }
+                        }
                     )
                 },
                 confirmButton = {
                     TextButton(
                         onClick = {
-                            onMoveItem(item, destPath)
+                            onMoveItem(item, moveDestPath)
                             showMoveDialog = null
                         }
                     ) { Text("Move") }
