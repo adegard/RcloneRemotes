@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Environment
 import android.provider.OpenableColumns
+import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.remotes.rclone.RcloneConfig
@@ -186,7 +187,44 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
         } else {
-            _errorMsg.value = "Cannot preview this file type"
+            // Binary files: download to cache and open with external viewer
+            viewModelScope.launch(Dispatchers.IO) {
+                _statusMsg.value = "Downloading ${item.name}..."
+                val tmpFile = File(ctx.cacheDir, item.name)
+                val err = RcloneConfig.copyFromRemote(ctx, _selectedRemote.value, fullPath, tmpFile.absolutePath)
+                if (err != null || !tmpFile.exists()) {
+                    _errorMsg.value = err ?: "Download failed"
+                    _statusMsg.value = ""
+                    return@launch
+                }
+                _statusMsg.value = ""
+                try {
+                    val uri = FileProvider.getUriForFile(
+                        ctx,
+                        "${ctx.packageName}.provider",
+                        tmpFile
+                    )
+                    val mime = ctx.contentResolver.getType(uri)
+                        ?: when {
+                            lower.endsWith(".pdf") -> "application/pdf"
+                            lower.endsWith(".png") -> "image/png"
+                            lower.endsWith(".jpg") || lower.endsWith(".jpeg") -> "image/jpeg"
+                            lower.endsWith(".gif") -> "image/gif"
+                            lower.endsWith(".mp4") -> "video/mp4"
+                            lower.endsWith(".mp3") -> "audio/mpeg"
+                            lower.endsWith(".zip") -> "application/zip"
+                            lower.endsWith(".epub") -> "application/epub+zip"
+                            else -> "*/*"
+                        }
+                    val intent = Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(uri, mime)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    ctx.startActivity(intent)
+                } catch (e: Exception) {
+                    _errorMsg.value = "No viewer found: ${e.message}"
+                }
+            }
         }
     }
 

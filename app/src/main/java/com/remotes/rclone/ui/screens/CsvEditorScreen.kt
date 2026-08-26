@@ -2,7 +2,6 @@ package com.remotes.rclone.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -10,7 +9,6 @@ import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -26,19 +24,31 @@ fun CsvEditorScreen(
     onBack: () -> Unit
 ) {
     var content by remember { mutableStateOf(csvContent) }
+    var hasChanged by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("CSV: $fileName") },
+                title = {
+                    Column {
+                        Text("CSV: $fileName")
+                        if (hasChanged) {
+                            Text(
+                                "modified",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
                     }
                 },
                 actions = {
-                    IconButton(onClick = { onSave(content) }) {
+                    IconButton(onClick = { onSave(content); hasChanged = false }) {
                         Icon(Icons.Default.Save, "Save")
                     }
                 }
@@ -72,35 +82,25 @@ fun CsvEditorScreen(
                 }
             }
 
-            BasicTextField(
+            OutlinedTextField(
                 value = content,
-                onValueChange = { content = it },
+                onValueChange = {
+                    content = it
+                    hasChanged = true
+                },
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(16.dp)
+                    .padding(8.dp)
                     .verticalScroll(scrollState),
                 textStyle = LocalTextStyle.current.copy(
                     fontFamily = FontFamily.Monospace,
-                    fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurface
+                    fontSize = 12.sp
                 ),
-                decorationBox = { innerTextField ->
-                    Surface(
-                        modifier = Modifier.fillMaxSize(),
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        shape = MaterialTheme.shapes.medium
-                    ) {
-                        Box(modifier = Modifier.padding(12.dp)) {
-                            if (content.isEmpty()) {
-                                Text(
-                                    text = "Paste or edit CSV content here...",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            innerTextField()
-                        }
-                    }
-                }
+                label = { Text("Edit CSV content") },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
             )
         }
     }
