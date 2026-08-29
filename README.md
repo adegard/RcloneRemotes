@@ -1,3 +1,5 @@
+[![Buy me a coffee](https://cdn.buymeacoffee.com/buttons/v2/default-red.png)](https://www.buymeacoffee.com/adegard)
+
 # Rclone Remotes
 
 Android app for managing cloud storage via [rclone](https://rclone.org/). Converted from the Python TUI [rclone_remotes.py](https://github.com/adegard/RcloneRemotes) to Kotlin/Jetpack Compose.
