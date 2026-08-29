@@ -2,6 +2,8 @@
 
 Android app for managing cloud storage via [rclone](https://rclone.org/). Converted from the Python TUI [rclone_remotes.py](https://github.com/adegard/RcloneRemotes) to Kotlin/Jetpack Compose.
 
+![Screenshot](docs/screenshot.png)
+
 ## Features
 
 - **Multi-remote support** - Box, Dropbox, Google Drive, Google Photos, OneDrive, pCloud, and any custom rclone remote
