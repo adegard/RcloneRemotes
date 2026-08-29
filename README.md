@@ -9,7 +9,6 @@ Android app for managing cloud storage via [rclone](https://rclone.org/). Conver
 - **Multi-remote support** - Box, Dropbox, Google Drive, Google Photos, OneDrive, pCloud, and any custom rclone remote
 - **File browser** - navigate directories, view file icons and sizes
 - **File operations** - create, delete, rename, move files and folders
-- **CSV editor** - edit CSV files directly in the app
 - **Text editor** - view and edit text-based files (.py, .md, .json, .txt, etc.)
 - **Upload/Download** - upload files from device, download to Downloads folder
 - **Sync Local -> Remote** - sync a local folder to the cloud
