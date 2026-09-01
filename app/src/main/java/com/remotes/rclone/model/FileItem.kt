@@ -3,7 +3,8 @@ package com.remotes.rclone.model
 data class FileItem(
     val name: String,
     val type: String,
-    val size: Long = 0
+    val size: Long = 0,
+    val fullPath: String? = null
 ) {
     val isDir: Boolean get() = type == "dir"
     val isFile: Boolean get() = type == "file"

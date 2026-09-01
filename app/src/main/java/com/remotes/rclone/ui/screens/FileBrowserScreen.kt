@@ -46,7 +46,13 @@ fun FileBrowserScreen(
     onSyncRemoteRemote: () -> Unit,
     onRefresh: () -> Unit,
     onRemoteSelector: () -> Unit,
-    onMoveItem: (FileItem, String) -> Unit
+    onMoveItem: (FileItem, String) -> Unit,
+    searchMode: Boolean,
+    searchQuery: String,
+    searchResults: List<FileItem>,
+    onToggleSearch: () -> Unit,
+    onSearch: (String) -> Unit,
+    onCloseSearch: () -> Unit
 ) {
     var showCreateDialog by remember { mutableStateOf(false) }
     var createDialogType by remember { mutableStateOf("file") }
@@ -101,6 +107,12 @@ fun FileBrowserScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = onToggleSearch) {
+                        Icon(
+                            if (searchMode) Icons.Default.Close else Icons.Default.Search,
+                            if (searchMode) "Close search" else "Search"
+                        )
+                    }
                     IconButton(onClick = onRefresh) {
                         Icon(Icons.Default.Refresh, "Refresh")
                     }
@@ -137,6 +149,23 @@ fun FileBrowserScreen(
         }
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            if (searchMode) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { onSearch(it) },
+                    modifier = Modifier.fillMaxWidth().padding(8.dp),
+                    placeholder = { Text("Search files in this folder...") },
+                    leadingIcon = { Icon(Icons.Default.Search, null) },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { onSearch(""); onCloseSearch() }) {
+                                Icon(Icons.Default.Close, "Clear")
+                            }
+                        }
+                    },
+                    singleLine = true
+                )
+            }
             if (statusMsg.isNotEmpty()) {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
@@ -169,14 +198,42 @@ fun FileBrowserScreen(
             }
 
             LazyColumn(modifier = Modifier.fillMaxSize()) {
-                items(items) { item ->
+                val displayItems = if (searchMode) searchResults else items
+                if (searchMode && searchQuery.isNotEmpty() && displayItems.isEmpty() && !isLoading) {
+                    item {
+                        Text(
+                            text = "No matches found",
+                            modifier = Modifier.padding(16.dp),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                items(displayItems) { item ->
                     ListItem(
                         headlineContent = {
-                            Text(
-                                text = item.name,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                            if (searchMode && item.fullPath != null) {
+                                Column {
+                                    Text(
+                                        text = item.name,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = item.fullPath,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            } else {
+                                Text(
+                                    text = item.name,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         },
                         supportingContent = {
                             if (item.isFile) {

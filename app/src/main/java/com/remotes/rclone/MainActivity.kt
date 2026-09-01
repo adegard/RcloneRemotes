@@ -92,6 +92,9 @@ fun RcloneApp(vm: MainViewModel = viewModel()) {
     val csvFileName by vm.csvFileName.collectAsState()
     val textContent by vm.textContent.collectAsState()
     val textFileName by vm.textFileName.collectAsState()
+    val searchMode by vm.searchMode.collectAsState()
+    val searchQuery by vm.searchQuery.collectAsState()
+    val searchResults by vm.searchResults.collectAsState()
 
     when (screen) {
         is MainViewModel.Screen.RemoteSelector -> {
@@ -126,7 +129,13 @@ fun RcloneApp(vm: MainViewModel = viewModel()) {
                 onSyncRemoteRemote = { vm.goToSyncRemoteRemote() },
                 onRefresh = { vm.refresh() },
                 onRemoteSelector = { vm.goToRemoteSelector() },
-                onMoveItem = { item, dest -> vm.moveItem(item, dest) }
+                onMoveItem = { item, dest -> vm.moveItem(item, dest) },
+                searchMode = searchMode,
+                searchQuery = searchQuery,
+                searchResults = searchResults,
+                onToggleSearch = { vm.setSearchMode(!searchMode) },
+                onSearch = { vm.searchFiles(it) },
+                onCloseSearch = { vm.setSearchMode(false) }
             )
         }
         is MainViewModel.Screen.CsvEditor -> {

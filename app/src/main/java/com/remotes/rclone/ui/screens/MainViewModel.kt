@@ -68,6 +68,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _textFileName = MutableStateFlow("")
     val textFileName: StateFlow<String> = _textFileName
 
+    private val _searchMode = MutableStateFlow(false)
+    val searchMode: StateFlow<Boolean> = _searchMode
+
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery
+
+    private val _searchResults = MutableStateFlow<List<FileItem>>(emptyList())
+    val searchResults: StateFlow<List<FileItem>> = _searchResults
+
     sealed class Screen {
         object RemoteSelector : Screen()
         object FileBrowser : Screen()
@@ -154,12 +163,39 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         return true
     }
 
+    fun setSearchMode(enabled: Boolean) {
+        _searchMode.value = enabled
+        if (!enabled) {
+            _searchQuery.value = ""
+            _searchResults.value = emptyList()
+        }
+    }
+
+    fun searchFiles(query: String) {
+        _searchQuery.value = query
+        if (query.isBlank()) {
+            _searchResults.value = emptyList()
+            return
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            _isLoading.value = true
+            val results = RcloneConfig.search(ctx, _selectedRemote.value, _currentPath.value, query)
+            _searchResults.value = results
+            _isLoading.value = false
+        }
+    }
+
+    fun openSearchResult(item: FileItem) {
+        setSearchMode(false)
+        refresh()
+    }
+
     fun openFile(item: FileItem) {
         if (item.isDir) {
             navigateInto(item)
             return
         }
-        val fullPath = if (_currentPath.value.isEmpty()) item.name else "${_currentPath.value}/${item.name}"
+        val fullPath = item.fullPath ?: if (_currentPath.value.isEmpty()) item.name else "${_currentPath.value}/${item.name}"
         val lower = item.name.lowercase()
 
         if (lower.endsWith(".csv")) {
@@ -258,13 +294,25 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    private fun itemPath(item: FileItem): String =
+        item.fullPath ?: if (_currentPath.value.isEmpty()) item.name else "${_currentPath.value}/${item.name}"
+
+    private fun itemBasePath(item: FileItem): String {
+        item.fullPath?.let {
+            return it.substringBeforeLast("/", "").let { parent ->
+                if (parent == it) "" else parent
+            }
+        }
+        return _currentPath.value
+    }
+
     fun deleteItem(item: FileItem) {
-        if (RcloneConfig.isReadOnlyPath(_currentPath.value)) {
+        if (RcloneConfig.isReadOnlyPath(itemBasePath(item))) {
             _errorMsg.value = "Cannot delete in 'Shared with me'"
             return
         }
         viewModelScope.launch(Dispatchers.IO) {
-            val path = if (_currentPath.value.isEmpty()) item.name else "${_currentPath.value}/${item.name}"
+            val path = itemPath(item)
             val err = if (item.isDir) {
                 RcloneConfig.deleteFolder(ctx, _selectedRemote.value, path)
             } else {
@@ -280,13 +328,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun renameItem(item: FileItem, newName: String) {
-        if (RcloneConfig.isReadOnlyPath(_currentPath.value)) {
+        if (RcloneConfig.isReadOnlyPath(itemBasePath(item))) {
             _errorMsg.value = "Cannot rename in 'Shared with me'"
             return
         }
         viewModelScope.launch(Dispatchers.IO) {
-            val basePath = _currentPath.value
-            val oldPath = if (basePath.isEmpty()) item.name else "$basePath/${item.name}"
+            val basePath = itemBasePath(item)
+            val oldPath = itemPath(item)
             val newPath = if (basePath.isEmpty()) newName else "$basePath/$newName"
             val err = RcloneConfig.moveItem(ctx, _selectedRemote.value, oldPath, newPath)
             if (err != null) {
@@ -299,13 +347,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun moveItem(item: FileItem, destPath: String) {
-        if (RcloneConfig.isReadOnlyPath(_currentPath.value)) {
+        if (RcloneConfig.isReadOnlyPath(itemBasePath(item))) {
             _errorMsg.value = "Cannot move in 'Shared with me'"
             return
         }
         viewModelScope.launch(Dispatchers.IO) {
-            val basePath = _currentPath.value
-            val srcPath = if (basePath.isEmpty()) item.name else "$basePath/${item.name}"
+            val srcPath = itemPath(item)
             val dstPath = if (destPath.isEmpty()) item.name else "$destPath/${item.name}"
             val err = RcloneConfig.moveItem(ctx, _selectedRemote.value, srcPath, dstPath)
             if (err != null) {
@@ -354,7 +401,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun downloadFile(item: FileItem) {
         viewModelScope.launch(Dispatchers.IO) {
-            val remotePath = if (_currentPath.value.isEmpty()) item.name else "${_currentPath.value}/${item.name}"
+            val remotePath = itemPath(item)
             val downloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
             val localPath = File(downloads, item.name).absolutePath
             val err = RcloneConfig.copyFromRemote(ctx, _selectedRemote.value, remotePath, localPath)

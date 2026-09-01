@@ -227,6 +227,38 @@ object RcloneConfig {
         return r.stdout.lines().filter { it.isNotBlank() }.map { it.trimEnd(':') }
     }
 
+    fun search(context: Context, remote: String, path: String, query: String): List<FileItem> {
+        if (query.isBlank()) return emptyList()
+        val fullPath = if (path.isEmpty()) "$remote:" else "$remote:$path"
+        val r = runCommand(context, listOf("lsjson", "-R", "--files-only", fullPath), timeoutMs = 120_000)
+        if (r.exitCode != 0) return emptyList()
+
+        val q = query.lowercase()
+        val results = mutableListOf<FileItem>()
+        return try {
+            val arr = org.json.JSONArray(r.stdout)
+            for (i in 0 until arr.length()) {
+                val obj = arr.getJSONObject(i)
+                val name = obj.getString("Name")
+                val pathInRemote = obj.optString("Path", "")
+                if (name.lowercase().contains(q)) {
+                    val full = if (path.isEmpty()) pathInRemote else "$path/$pathInRemote".trim('/')
+                    results.add(
+                        FileItem(
+                            name = name,
+                            type = "file",
+                            size = obj.optLong("Size", 0),
+                            fullPath = full
+                        )
+                    )
+                }
+            }
+            results
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
     fun getAbout(context: Context, remote: String): QuotaInfo? {
         val r = runCommand(context, listOf("about", "$remote:"))
         if (r.exitCode != 0) return null
