@@ -257,9 +257,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     }
-                    if (intent.resolveActivity(ctx.packageManager) != null) {
+                    try {
                         ctx.startActivity(intent)
-                    } else {
+                    } catch (e: android.content.ActivityNotFoundException) {
                         _errorMsg.value = "No viewer found for $mime"
                     }
                 } catch (e: android.content.ActivityNotFoundException) {
