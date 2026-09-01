@@ -255,10 +255,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     val intent = Intent(Intent.ACTION_VIEW).apply {
                         setDataAndType(uri, mime)
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     }
-                    ctx.startActivity(intent)
+                    if (intent.resolveActivity(ctx.packageManager) != null) {
+                        ctx.startActivity(intent)
+                    } else {
+                        _errorMsg.value = "No viewer found for $mime"
+                    }
+                } catch (e: android.content.ActivityNotFoundException) {
+                    _errorMsg.value = "No viewer found for this file type"
                 } catch (e: Exception) {
-                    _errorMsg.value = "No viewer found: ${e.message}"
+                    _errorMsg.value = "Failed to open file: ${e.message}"
                 }
             }
         }
